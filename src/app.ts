@@ -213,7 +213,7 @@ export async function buildApp() {
         },
     }, async (request, reply) => {
         return {
-            name: 'Teachify API',
+            name: 'sinfLMS API',
             version: '1.0.0',
             description: 'Learning Management System API',
             environment: process.env.NODE_ENV || 'development',

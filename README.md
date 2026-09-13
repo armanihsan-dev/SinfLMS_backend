@@ -1,12 +1,5 @@
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Merienda:wght@400;700&display=swap');
-  
-  body {
-    font-family: 'Merienda', cursive;
-  }
-</style>
 
-# Techify - Modern Online Learning Platform
+# SinfLMS - Modern Online Learning Platform
 
 <div align="center">
 
