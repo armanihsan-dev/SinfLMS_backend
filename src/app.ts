@@ -13,6 +13,7 @@ import { authenticate } from './middleware/auth.middleware.js';
 import routes from './routes/index.js';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
+import lemonSqueezyWebhook from './webhooks/lemon-squeezy.webhook.js';
 
 // Load environment variables
 dotenv.config();
@@ -21,7 +22,7 @@ export async function buildApp() {
     const fastify = Fastify({
         logger: loggerConfig,  // Use the config
         trustProxy: true,
-        routerOptions: {        // ✅ Use routerOptions instead
+        routerOptions: {        // Use routerOptions instead
             ignoreTrailingSlash: true,
             caseSensitive: true,
         },
@@ -55,17 +56,19 @@ export async function buildApp() {
 
     fastify.decorateRequest('session', null);
     fastify.decorateRequest('userId', null);
-    fastify.decorateRequest('user', null);      // ✅ Add this!
+    fastify.decorateRequest('user', null);
     fastify.decorateRequest('sessionId', null);
 
     fastify.decorate('authenticate', authenticate);
+
     // CORS - Security
     await fastify.register(cors, {
         origin: (origin, cb) => {
             const allowedOrigins = [
                 'http://localhost:3000',
                 'http://localhost:3001',
-                'http://localhost:5173'
+                'http://localhost:5173',
+                'http://localhost:5174'
             ];
             if (!origin || allowedOrigins.includes(origin)) {
                 cb(null, true);
@@ -97,7 +100,7 @@ export async function buildApp() {
 
     // Rate Limiting
     await fastify.register(rateLimit, {
-        max: 100,
+        max: 10,
         timeWindow: '1 minute',
         keyGenerator: (req) => req.ip,
         errorResponseBuilder: (req, context) => ({
@@ -107,19 +110,44 @@ export async function buildApp() {
         }),
     });
 
+    // src/app.ts (Swagger registration section)
+
     await fastify.register(fastifySwagger, {
         openapi: {
             openapi: '3.0.0',
             info: {
-                title: 'Teachify API',
+                title: 'SinfLMS API',
                 version: '1.0.0',
                 description: 'Learning Management System API',
             },
-            servers: [{ url: `http://localhost:${process.env.PORT || 3900}` }],
+            servers: [
+                {
+                    url: `http://localhost:${process.env.PORT || 3900}`,
+                    description: 'Development server',
+                },
+            ],
             tags: [
                 { name: 'System', description: 'System endpoints' },
                 { name: 'Authentication', description: 'Authentication endpoints' },
+                { name: 'Users', description: 'User management endpoints' },
+                { name: 'Courses', description: 'Course management endpoints' },
             ],
+            components: {
+                securitySchemes: {
+                    cookieAuth: {
+                        type: 'apiKey',
+                        in: 'cookie',
+                        name: 'sessionId',
+                        description: 'Session cookie (HttpOnly, Secure)',
+                    },
+                    bearerAuth: {
+                        type: 'http',
+                        scheme: 'bearer',
+                        bearerFormat: 'JWT',
+                        description: 'JWT token for API access',
+                    },
+                },
+            },
         },
     });
 
@@ -132,7 +160,7 @@ export async function buildApp() {
     });
 
     setupErrorHandler(fastify)
-
+    await fastify.register(lemonSqueezyWebhook)
     await fastify.register(routes, { prefix: '/api/v1' })
 
 

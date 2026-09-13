@@ -24,17 +24,17 @@
 
 ---
 
-## About Teachify
+## About SinfLMS
 
-Teachify is a comprehensive online learning and education platform designed to connect instructors with learners worldwide. It's a full-featured LMS (Learning Management System) that enables educators to create and manage courses, while students can enroll, learn, track progress, and earn certificates. The platform emphasizes community engagement through course reviews, wishlists, and peer learning.
+SinfLMS is a comprehensive online learning and education platform designed to connect instructors with learners worldwide. It's a full-featured LMS (Learning Management System) that enables educators to create and manage courses, while students can enroll, learn, track progress, and earn certificates. The platform emphasizes community engagement through course reviews, wishlists, and peer learning.
 
-Built with modern web technologies, Teachify provides a seamless learning experience with real-time progress tracking, interactive quizzes, and data-driven insights for both students and instructors.
+Built with modern web technologies, SinfLMS provides a seamless learning experience with real-time progress tracking, interactive quizzes, and data-driven insights for both students and instructors.
 
 ---
 
 ## Overview
 
-Teachify is a production-ready backend service that powers a modern online learning platform. It provides a complete ecosystem for course creation, student enrollment, progress tracking, and interactive learning with real-time analytics and notifications.
+SinfLMS is a production-ready backend service that powers a modern online learning platform. It provides a complete ecosystem for course creation, student enrollment, progress tracking, and interactive learning with real-time analytics and notifications.
 
 **Key Highlights:**
 

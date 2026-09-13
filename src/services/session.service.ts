@@ -17,7 +17,7 @@ export class SessionService {
 
         // If at max, remove oldest using sorted set
         if (currentCount >= this.MAX_SESSIONS) {
-            // ✅ FIX: Use zrange + zrem instead of zpopmin
+            // FIX: Use zrange + zrem instead of zpopmin
             await this.removeOldestSession(userId);
         }
 
@@ -58,7 +58,7 @@ export class SessionService {
     private async removeOldestSession(userId: string) {
         const userSessionsSortedKey = `${this.userSessionsSortedKey}${userId}`;
 
-        // ✅ Get the oldest session (first item in sorted set)
+        //  Get the oldest session (first item in sorted set)
         const oldestTokens = await redis.zrange(
             userSessionsSortedKey,
             "0",  // Start index

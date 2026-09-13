@@ -1,13 +1,14 @@
 // src/routes/index.ts
 import { FastifyInstance } from 'fastify';
 import authRoutes from './Authentication.routes.js';
+import userRoutes from './User.routes.js';
+import subscriptionRoutes from './Subscription.Routes.js';
 
 
 export default async function routes(fastify: FastifyInstance) {
-    // Register all v1 routes with /api/v1 prefix
-    fastify.register(authRoutes, { prefix: '/auth' });
 
-    // Future routes will go here:
-    // fastify.register(userRoutes, { prefix: '/users' });
-    // fastify.register(courseRoutes, { prefix: '/courses' });
+    fastify.register(authRoutes, { prefix: '/auth' });
+    fastify.register(userRoutes, { prefix: '/users' })
+    await fastify.register(subscriptionRoutes, { prefix: '/subscription' });
+
 }

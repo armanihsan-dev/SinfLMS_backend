@@ -1,6 +1,6 @@
 // src/controllers/auth.controller.ts
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { loginSchema, registerSchema } from '../db/schemas/auth.schema.js';
+import { loginSchema, registerSchema, sendOtpSchema, verifyOtpSchema } from '../db/schemas/auth.schema.js';
 import { db } from '../config/database.js';
 import { users } from '../db/schema/users.schema.js';
 import { eq } from 'drizzle-orm';
@@ -11,8 +11,96 @@ import { googleService } from '../services/google.service.js';
 import { randomBytes } from 'node:crypto';
 import { githubService } from '../services/github.service.js';
 import axios from 'axios';
+import { otpService } from '../services/otp.service.js';
+import { mailerService } from '../services/mailer.service.js';
 
 export class AuthController {
+
+    async googleLogin(request: FastifyRequest, reply: FastifyReply) {
+        const { token } = request.body as { token: string };
+
+        // 1. Verify Google token
+        const googleUser = await googleService.verifyGoogleToken(token);
+
+        // 2. Find or create user
+        let [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.email, googleUser.email as string))
+            .limit(1);
+
+        if (!user) {
+            // Create new user
+            const username = googleUser.email!.split('@')[0] +
+                randomBytes(4).toString('hex');
+            const [newUser] = await db
+                .insert(users)
+                .values({
+                    email: googleUser.email as string,
+                    fullName: googleUser.fullName ?? 'User',
+                    username: username,
+                    avatarUrl: googleUser.avatarUrl ?? null,
+                    googleId: googleUser.googleId ?? null,
+                    isOAuthUser: true,
+                    isVerified: googleUser.isVerified || true,
+                    isActive: true,
+                    passwordHash: 'oauth_google_placeholder'
+                })
+                .returning();
+
+            user = newUser;
+        } else if (!user.googleId) {
+            // Link Google account to existing user
+            await db
+                .update(users)
+                .set({
+                    googleId: googleUser.googleId,
+                    isOAuthUser: true,
+                    avatarUrl: googleUser.avatarUrl || user.avatarUrl,
+                    isVerified: googleUser.isVerified || true,
+                })
+                .where(eq(users.id, user.id));
+        }
+        // 3. Create session
+        const session = await sessionService.createSession(user.id, {
+            userAgent: request.headers['user-agent'],
+            ipAddress: request.ip,
+            rememberMe: true,
+        });
+
+        // 4. Update last login
+        await db
+            .update(users)
+            .set({
+                lastLoginAt: new Date(),
+                lastLoginIp: request.ip,
+            })
+            .where(eq(users.id, user.id));
+
+        // 5. Set cookie
+        reply.setCookie('sessionId', session.sessionToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 30 * 24 * 60 * 60,
+            path: '/',
+        });
+
+        return {
+            message: 'Login successful',
+            user: {
+                id: user.id,
+                email: user.email,
+                fullName: user.fullName,
+                username: user.username,
+                role: user.role,
+                avatarUrl: user.avatarUrl,
+                isVerified: user.isVerified,
+                isNewUser: !user.googleId,
+            }
+        };
+    }
+
     async githubLogin(request: FastifyRequest, reply: FastifyReply) {
         const { code } = request.body as { code: string };
 
@@ -114,9 +202,61 @@ export class AuthController {
         };
     }
 
+    async sendOtp(request: FastifyRequest, reply: FastifyReply) {
+        const { email, fullName } = sendOtpSchema.parse(request.body);
+
+        const canSend = await otpService.canSendOTP(email);
+        
+        if (!canSend) {
+            throw Errors.tooManyRequests('Please wait before requesting another code');
+        }
+
+        // Don't allow OTP for already-registered emails
+        const existing = await db
+            .select()
+            .from(users)
+            .where(eq(users.email, email.toLowerCase()))
+            .limit(1);
+
+        if (existing.length > 0) {
+            throw Errors.conflict('An account with this email already exists');
+        }
+
+        const otp = otpService.generateOTP();
+        await otpService.saveOTP(email, otp);
+
+        await mailerService.sendOTP(email, otp, fullName);
+
+        return {
+            success: true,
+            message: 'Verification code sent to your email',
+        };
+    }
+
+    async verifyOtp(request: FastifyRequest, reply: FastifyReply) {
+        const { email, otp } = verifyOtpSchema.parse(request.body);
+
+        const isValid = await otpService.verifyOTP(email, otp);
+
+        if (!isValid) {
+            throw Errors.unauthorized('Invalid or expired OTP');
+        }
+
+        return {
+            success: true,
+            message: 'Email verified successfully',
+        };
+    }
+
+
     async register(request: FastifyRequest, reply: FastifyReply) {
         const validatedData = registerSchema.parse(request.body);
 
+        const emailVerified = await otpService.isEmailVerified(validatedData.email)
+
+        if (!emailVerified) {
+            throw Errors.unauthorized('Please verify your email before registering');
+        }
         const existingUser = await db
             .select()
             .from(users)
@@ -133,6 +273,7 @@ export class AuthController {
                 throw Errors.conflict('Username already taken');
             }
         }
+
         const saltRounds = 12;
         const passwordHash = await bcrypt.hash(validatedData.password, saltRounds);
         const [newUser] = await db
@@ -283,107 +424,6 @@ export class AuthController {
         };
     }
 
-    async googleLogin(request: FastifyRequest, reply: FastifyReply) {
-        const { token } = request.body as { token: string };
-
-        // 1. Verify Google token
-        const googleUser = await googleService.verifyToken(token);
-
-        console.log("GOOGLE USER", googleUser);
-        // 2. Find or create user
-        let [user] = await db
-            .select()
-            .from(users)
-            .where(eq(users.email, googleUser.email as string))
-            .limit(1);
-
-        if (!user) {
-            // Create new user
-            const username = googleUser.email!.split('@')[0] +
-                randomBytes(4).toString('hex');
-            console.log("USER NAME :", username);
-            const [newUser] = await db
-                .insert(users)
-                .values({
-                    email: googleUser.email as string,
-                    fullName: googleUser.fullName ?? 'User',
-                    username: username,
-                    avatarUrl: googleUser.avatarUrl ?? null,
-                    googleId: googleUser.googleId ?? null,
-                    isOAuthUser: true,
-                    isVerified: googleUser.isVerified || true,
-                    isActive: true,
-                    passwordHash: 'oauth_google_placeholder'
-                })
-                .returning();
-
-            user = newUser;
-        } else if (!user.googleId) {
-            // Link Google account to existing user
-            await db
-                .update(users)
-                .set({
-                    googleId: googleUser.googleId,
-                    isOAuthUser: true,
-                    avatarUrl: googleUser.avatarUrl || user.avatarUrl,
-                    isVerified: googleUser.isVerified || true,
-                })
-                .where(eq(users.id, user.id));
-        }
-        // 3. Create session
-        const session = await sessionService.createSession(user.id, {
-            userAgent: request.headers['user-agent'],
-            ipAddress: request.ip,
-            rememberMe: true,
-        });
-
-        // 4. Update last login
-        await db
-            .update(users)
-            .set({
-                lastLoginAt: new Date(),
-                lastLoginIp: request.ip,
-            })
-            .where(eq(users.id, user.id));
-
-        // 5. Set cookie
-        reply.setCookie('sessionId', session.sessionToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 30 * 24 * 60 * 60,
-            path: '/',
-        });
-
-        return {
-            message: 'Login successful',
-            user: {
-                id: user.id,
-                email: user.email,
-                fullName: user.fullName,
-                username: user.username,
-                role: user.role,
-                avatarUrl: user.avatarUrl,
-                isVerified: user.isVerified,
-                isNewUser: !user.googleId,
-            },
-        };
-    }
-
-    async me(request: FastifyRequest, reply: FastifyReply) {
-        // Get user from request (set by auth middleware)
-        const user = request.user;
-
-        console.log("USER in me controller :", user);
-        if (!user) {
-            throw Errors.unauthorized('Not authenticated');
-        }
-        // Return WITHOUT fetching again!
-        return {
-            message: 'User retrieved successfully',
-            user: user,
-        };
-    }
 
     async logout(request: FastifyRequest, reply: FastifyReply) {
         // Get session from request (set by auth middleware)
@@ -416,4 +456,7 @@ export class AuthController {
             message: 'Logged out successfully',
         };
     }
+
+
+
 }

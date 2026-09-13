@@ -6,7 +6,7 @@ export const registerSchema = z.object({
     email: z.string().email('Invalid email format'),
     password: z.string().min(8, 'Password must be at least 8 characters'),
     fullName: z.string().min(2, 'Full name must be at least 2 characters'),
-    username: z.string().min(3, 'Username must be at least 3 characters').optional(),
+    username: z.string().min(3, 'Username must be at least 3 characters').optional().or(z.literal('')),
     rememberMe: z.boolean().default(false),
 });
 
@@ -34,6 +34,125 @@ export const errorResponseSchema = z.object({
     })).optional(),
 });
 
+export const sendOtpSchema = z.object({
+    email: z.string().email('Invalid email address'),
+    fullName: z.string().min(2, 'Name is required'),
+});
+
+export const verifyOtpSchema = z.object({
+    email: z.string().email('Invalid email address'),
+    otp: z.string().length(6, 'OTP must be 6 digits'),
+});
+
+
+
+export type SendOtpInput = z.infer<typeof sendOtpSchema>;
+export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
+
+
+//Schemas For fastify Routes
+export const sendOtpFastifySchema = {
+    tags: ['Authentication'],
+    description: 'Send OTP to email for registration',
+    body: {
+        type: 'object',
+        required: ['email', 'fullName'],
+        properties: {
+            email: { type: 'string', format: 'email' },
+            fullName: { type: 'string', minLength: 2 },
+        },
+    },
+    response: {
+        200: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+            },
+        },
+        400: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+                errors: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            field: { type: 'string' },
+                            message: { type: 'string' },
+                        },
+                    },
+                },
+            },
+        },
+        429: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+            },
+        },
+    },
+};
+
+export const verifyOtpFastifySchema = {
+    tags: ['Authentication'],
+    description: 'Verify OTP sent to email',
+    body: {
+        type: 'object',
+        required: ['email', 'otp'],
+        properties: {
+            email: { type: 'string', format: 'email' },
+            otp: { type: 'string', minLength: 6, maxLength: 6 },
+        },
+    },
+    response: {
+        200: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+                user: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string' },
+                        email: { type: 'string', format: 'email' },
+                        fullName: { type: 'string' },
+                        username: { type: ['string', 'null'] },
+                        role: { type: 'string' },
+                    },
+                    additionalProperties: true,
+                },
+            },
+        },
+        400: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+                errors: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            field: { type: 'string' },
+                            message: { type: 'string' },
+                        },
+                    },
+                },
+            },
+        },
+        401: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean' },
+                message: { type: 'string' },
+            },
+        },
+    },
+};
 
 //Schemas For fastify Routes
 export const registerFastifySchema = {
@@ -153,23 +272,9 @@ export const loginWithGoogleFastifySchema = {
         required: ['token'],
         properties: {
             token: { type: 'string' },
+            AccessToken: { type: 'string' }
         },
     },
-    response: {
-        200: {
-            type: 'object',
-            properties: {
-                success: { type: 'boolean' },
-                message: { type: 'string' },
-                user: { type: 'object' },
-            },
-        },
-    },
-}
-export const CurrentUserFastifySchema = {
-    tags: ['Authentication'],
-    description: 'Get current authenticated user',
-    security: [{ cookieAuth: [] }],
     response: {
         200: {
             type: 'object',
@@ -180,41 +285,21 @@ export const CurrentUserFastifySchema = {
                     type: 'object',
                     properties: {
                         id: { type: 'string' },
-                        email: { type: 'string' },
+                        email: { type: 'string', format: 'email' },
                         fullName: { type: 'string' },
-                        username: { type: 'string' },
+                        username: { type: ['string', 'null'] },
                         role: { type: 'string' },
-                        avatarUrl: { type: 'string' },
-                        bio: { type: 'string' },
-                        expertise: { type: 'array', items: { type: 'string' } },
+                        avatarUrl: { type: ['string', 'null'] },
+                        bio: { type: ['string', 'null'] },
                         isVerified: { type: 'boolean' },
-                        isActive: { type: 'boolean' },
-                        lastLoginAt: { type: 'string' },
-                        createdAt: { type: 'string' },
-                        updatedAt: { type: 'string' },
                     },
-                },
-            },
-        },
-        401: {
-            type: 'object',
-            properties: {
-                success: { type: 'boolean' },
-                message: { type: 'string' },
-                errors: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            field: { type: 'string' },
-                            message: { type: 'string' },
-                        },
-                    },
+                    additionalProperties: true,
                 },
             },
         },
     },
-};
+}
+
 export const logoutFastifySchema = {
     tags: ['Authentication'],
     description: 'Logout user - revokes session and clears cookie',
@@ -280,3 +365,5 @@ export const loginWithGithubFastifySchema = {
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type UserResponse = z.infer<typeof userResponseSchema>;
+
+

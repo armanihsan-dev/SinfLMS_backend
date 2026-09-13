@@ -15,3 +15,4 @@ export * from './wishlists.schema.js';
 export * from './certificates.schema.js';
 export * from './notifications.schema.js';
 export * from './analytics.schema.js';
+export * from './instructors.schema.js'

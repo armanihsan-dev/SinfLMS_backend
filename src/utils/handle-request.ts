@@ -25,7 +25,7 @@ export async function handleRequest<T>(
             return reply.status(400).send({
                 success: false,
                 message: 'Validation Error',
-                errors: error.errors.map((err) => ({
+                errors: error.issues.map((err) => ({
                     field: err.path.join('.'),
                     message: err.message,
                 })),
@@ -72,9 +72,15 @@ export const Errors = {
     unauthorized: (message: string = 'Unauthorized') =>
         new AppError(message, 401),
 
+    forbidden: (message: string = 'Forbidden') =>
+        new AppError(message, 403),
+
     badRequest: (message: string = 'Bad request') =>
         new AppError(message, 400),
 
     internal: (message: string = 'Internal Server Error') =>
         new AppError(message, 500),
+
+    tooManyRequests: (message: string = 'Too many requests, please try again later') =>
+        new AppError(message, 429),
 };
